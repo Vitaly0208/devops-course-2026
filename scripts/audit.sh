@@ -46,5 +46,13 @@ check "Политика входящего трафика по умолчани�
 echo "[3] Учётные записи"
 awk -F: '$3>=1000 && $3<65534 {printf "    %s (uid=%s)\n",$1,$3}' /etc/passwd
 
+echo "[4] Веб-сервер"
+NGINX_STATUS="$(systemctl is-active nginx)"
+check "Служба Nginx активна" "active" "$NGINX_STATUS"
+check "Виртуальный хост devops.local включён" "yes" "$(test -L /etc/nginx/sites-enabled/devops-site && echo yes || echo no)"
+check "Порт HTTP 80 слушается" "yes" "$(sudo ss -ltn | grep -q ":80 " && echo yes || echo no)"
+check "Порт HTTPS 443 слушается" "yes" "$(sudo ss -ltn | grep -q ":443 " && echo yes || echo no)"
+check "TLS-сертификат существует" "yes" "$(test -s /etc/nginx/ssl/devops.local.crt && echo yes || echo no)"
+
 echo "Пройдено: $PASS, не пройдено: $FAIL"
 [[ "$FAIL" -eq 0 ]] && exit 0 || exit 1
