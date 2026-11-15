@@ -92,7 +92,7 @@ Nginx установлен и запущен как системная служ�
 - Сертификат: `/etc/nginx/ssl/devops.local.crt`
 - Закрытый ключ: `/etc/nginx/ssl/devops.local.key`
 
-Браузер предупреждает, что сертификат не доверен центром сертификации. Это ожидаемо для самоподписанного сертификата. Проверка из WSL выполняется с `curl -k`.
+Браузер предупреждает, что сертификат не доверен центром сертификации. Это ожидаемо для самоподписанного сертификата. Изначально проверка из WSL выполнялась с `curl -k`; после копирования сертификата сайт проверяется с `curl --cacert ~/devops.crt`.
 
 Исходные файлы сайта `index.html` и `404.html` подготовлены в WSL в `~/devops-site-src` и переданы на VM командой:
 
@@ -110,3 +110,21 @@ curl -k -i https://devops.local/not-found
 ```
 
 Ожидаемые результаты: конфигурация Nginx проходит проверку, главная страница возвращает `200 OK`, несуществующий путь — `404 Not Found` с содержимым `404.html`.
+
+### Фактические параметры конфигурации
+
+- Установленный пакет: `nginx`; версия веб-сервера — `1.24.0` на Ubuntu Server `24.04.5 LTS`.
+- Конфигурация сайта: `/etc/nginx/sites-available/devops-site`; активна через ссылку `/etc/nginx/sites-enabled/devops-site`.
+- Каталог сайта `/var/www/devops-site` принадлежит `devops:devops`, права каталога — `755`; опубликованные HTML-файлы принадлежат `devops:devops`, права — `644`.
+- Сертификат `/etc/nginx/ssl/devops.local.crt` принадлежит `root:root`, права — `644`.
+- Закрытый ключ `/etc/nginx/ssl/devops.local.key` принадлежит `root:root`, права — `600`.
+- Сертификат сформирован на 365 дней командой:
+
+```bash
+sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/nginx/ssl/devops.local.key -out /etc/nginx/ssl/devops.local.crt -subj "/CN=devops.local" -addext "subjectAltName=DNS:devops.local"
+
+```
+
+- Срок действия сертификата: с 15.11.2026 по 15.11.2027 UTC.
+- Сертификат скопирован по SSH в WSL как `~/devops.crt`; проверка сайта выполняется командой `curl --cacert ~/devops.crt https://devops.local`.
+- Исходники сайта находятся в `site/` репозитория. Доставка выполняется `scripts/deploy.sh`; режим просмотра плана — `scripts/deploy.sh --dry-run`. Сценарий устанавливает права `755` для каталогов и `644` для файлов.

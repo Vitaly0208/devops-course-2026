@@ -54,5 +54,20 @@ check "Порт HTTP 80 слушается" "yes" "$(sudo ss -ltn | grep -q ":80
 check "Порт HTTPS 443 слушается" "yes" "$(sudo ss -ltn | grep -q ":443 " && echo yes || echo no)"
 check "TLS-сертификат существует" "yes" "$(test -s /etc/nginx/ssl/devops.local.crt && echo yes || echo no)"
 
+
+# Дополнительные проверки веб-сервера по ПР № 6
+NGINX_CONFIG_OK="$(sudo nginx -t >/dev/null 2>&1 && echo yes || echo no)"
+check "Конфигурация Nginx синтаксически корректна" "yes" "$NGINX_CONFIG_OK"
+
+CERT_VALID="$(sudo openssl x509 -in /etc/nginx/ssl/devops.local.crt -checkend 2592000 -noout >/dev/null 2>&1 && echo yes || echo no)"
+check "Сертификат действителен ещё минимум 30 дней" "yes" "$CERT_VALID"
+
+WORLD_WRITABLE="$(find /var/www/devops-site -perm -o+w -print -quit)"
+if [[ -z "$WORLD_WRITABLE" ]]; then WORLD_WRITABLE_OK=yes; else WORLD_WRITABLE_OK=no; fi
+check "В каталоге сайта нет файлов с записью для всех" "yes" "$WORLD_WRITABLE_OK"
+
+KEY_MODE="$(sudo stat -c "%a" /etc/nginx/ssl/devops.local.key)"
+check "Права закрытого ключа равны 600" "600" "$KEY_MODE"
+
 echo "Пройдено: $PASS, не пройдено: $FAIL"
 [[ "$FAIL" -eq 0 ]] && exit 0 || exit 1
