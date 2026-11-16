@@ -69,5 +69,24 @@ check "В каталоге сайта нет файлов с записью дл
 KEY_MODE="$(sudo stat -c "%a" /etc/nginx/ssl/devops.local.key)"
 check "Права закрытого ключа равны 600" "600" "$KEY_MODE"
 
+
+echo "[5] Docker"
+DOCKER_STATUS="$(systemctl is-active docker 2>/dev/null || true)"
+check "Служба Docker активна" "active" "$DOCKER_STATUS"
+
+DB_HEALTH="$(docker inspect -f '{{.State.Health.Status}}' app-db-1 2>/dev/null || echo missing)"
+check "Контейнер PostgreSQL healthy" "healthy" "$DB_HEALTH"
+
+PORT_5000="$(sudo ss -ltnH | awk '$4 ~ /:5000$/ {print $4}')"
+if [[ "$PORT_5000" == "127.0.0.1:5000" ]]; then APP_PORT_OK=yes; else APP_PORT_OK=no; fi
+check "Порт приложения 5000 привязан только к 127.0.0.1" "yes" "$APP_PORT_OK"
+
+PORT_5432="$(sudo ss -ltnH | awk '$4 ~ /:5432$/ {print $4}')"
+if [[ -z "$PORT_5432" ]]; then DB_PORT_OK=yes; else DB_PORT_OK=no; fi
+check "Порт БД 5432 не опубликован на хосте" "yes" "$DB_PORT_OK"
+
+ENV_MODE="$(stat -c '%a' /home/devops/app/.env 2>/dev/null || echo missing)"
+check "Права /home/devops/app/.env равны 600" "600" "$ENV_MODE"
+
 echo "Пройдено: $PASS, не пройдено: $FAIL"
 [[ "$FAIL" -eq 0 ]] && exit 0 || exit 1
