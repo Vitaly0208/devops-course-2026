@@ -128,3 +128,47 @@ sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/nginx/ssl/
 - Срок действия сертификата: с 15.11.2026 по 15.11.2027 UTC.
 - Сертификат скопирован по SSH в WSL как `~/devops.crt`; проверка сайта выполняется командой `curl --cacert ~/devops.crt https://devops.local`.
 - Исходники сайта находятся в `site/` репозитория. Доставка выполняется `scripts/deploy.sh`; режим просмотра плана — `scripts/deploy.sh --dry-run`. Сценарий устанавливает права `755` для каталогов и `644` для файлов.
+## 9. Docker
+
+Docker Engine и Compose plugin установлены на Ubuntu VM из официального репозитория Docker:
+
+```bash
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo usermod -aG docker devops
+```
+
+После изменения групп пользователь `devops` повторно вошёл в систему. Членство в группе `docker` даёт права, эквивалентные `root`, поэтому добавлять в неё следует только доверенных пользователей.
+
+### Образ приложения
+
+Исходники находятся в `app/`. Образ собирается на VM:
+
+```bash
+cd ~/app
+docker build -t devops-app:1.0 .
+docker image ls devops-app
+docker history devops-app:1.0
+```
+
+Dockerfile устанавливает зависимости из `requirements.txt` отдельным слоем для повторного использования кэша. Gunicorn запускает Flask от непривилегированного пользователя `app`. Маршрут `/health` проверяет доступность приложения, а `/` записывает посещение в PostgreSQL и возвращает счётчик.
+
+### Docker Compose и секреты
+
+Файл `app/docker-compose.yml` описывает сервисы `app` и `db`. PostgreSQL использует закреплённый образ `postgres:16-alpine`, healthcheck и именованный том `app_db_data`. Приложение подключается к БД по имени сервиса `db`; `depends_on` с условием `service_healthy` ожидает готовности БД.
+
+В Git хранится только шаблон `app/.env.example`. Настоящий `app/.env` создаётся на VM со случайным паролем, имеет права `600` и исключён из Git правилом `.env` в `.gitignore`. Секреты нельзя включать в образ или коммитить.
+
+Запуск и проверка сервисов:
+
+```bash
+docker compose up -d --build
+docker compose ps
+curl -s http://127.0.0.1:5000/health
+curl -s http://127.0.0.1:5000/
+```
+
+Порт приложения опубликован только на `127.0.0.1:5000`; PostgreSQL порт `5432` на хост не опубликован. Docker может создавать NAT-правила, обходящие ожидаемую политику UFW, поэтому привязку к loopback необходимо сохранять. Nginx обслуживает HTTPS и проксирует `/app/` на `http://127.0.0.1:5000/`.
+
+Обычный `docker compose down` удаляет контейнеры и сеть, сохраняя том БД. Команда `docker compose down -v` удаляет том и данные посещений; применять её следует только при намеренном сбросе тестовой БД. Для восстановления после теста 502 приложение запускается командой `docker compose start app`.
+
+Для практической работы создан снимок VirtualBox `05-docker-compose`.
